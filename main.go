@@ -25,5 +25,7 @@ func main() {
 	})
 
 	router.POST("/signup", controllers.SignUp)
+	router.POST("/login", controllers.Login)
+
 	router.Run()
 }
