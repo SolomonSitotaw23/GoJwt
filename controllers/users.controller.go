@@ -2,8 +2,9 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -96,30 +97,46 @@ func Login(c *gin.Context) {
 
 	// generate jwt token
 
-	mySigningKey := []byte("hello")
+	JWT_SECRET := []byte(os.Getenv("JWT_SECRET"))
 	type MyCustomClaims struct {
-		Foo string `json:"foo"`
+		FirstName string `json:"firstName"`
+		//add custom fields here
 		jwt.RegisteredClaims
 	}
 
 	claims := MyCustomClaims{
 		"bar",
 		jwt.RegisteredClaims{
-			// A usual scenario is to set the expiration time relative to the current time
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)), // expiry of one day
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "tes ",
-			Subject:   "somebody",
-			ID:        "1",
-			Audience:  []string{"somebody_else"},
+			Issuer:    "go_jwt",
+			Subject:   strconv.Itoa(int(user.ID)),
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	ss, err := token.SignedString(mySigningKey)
+	signed_token, err := token.SignedString(JWT_SECRET)
 
-	fmt.Println("Token", ss, err)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "internal server error please try again",
+		})
+	}
 
 	// send it back
+	// by creating a cookie
+
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("Authorization", signed_token, 3600*24, "", "", true, true)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": "logged in successfully",
+	})
+}
+
+func Validate(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"message": "I'm logged in",
+	})
 }
