@@ -58,9 +58,8 @@ func RequireAuth(c *gin.Context) {
 		})
 	}
 
-	c.Set("user", user)
-
 	// attach to req
+	c.Set("user", user)
 
 	//continue
 	c.Next()
