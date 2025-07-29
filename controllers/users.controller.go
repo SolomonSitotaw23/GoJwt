@@ -3,14 +3,11 @@ package controllers
 import (
 	"context"
 	"net/http"
-	"os"
-	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/solomonsitotaw23/go_jwt/initializers"
 	"github.com/solomonsitotaw23/go_jwt/models"
+	"github.com/solomonsitotaw23/go_jwt/utils"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -64,7 +61,7 @@ func Login(c *gin.Context) {
 	var body models.UserData
 
 	// get the email/password off the body
-	if c.Bind(&body) != nil {
+	if c.ShouldBindJSON(&body) != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "failed to read body",
 		})
@@ -79,7 +76,7 @@ func Login(c *gin.Context) {
 	user, err := gorm.G[models.User](initializers.DB).Where("email = ?", body.Email).First(ctx)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Incorrect email address " + err.Error(),
+			"error": "Invalid Email or password",
 		})
 		return
 	}
@@ -90,37 +87,18 @@ func Login(c *gin.Context) {
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid password " + err.Error(),
+			"error": "Invalid Email or password",
 		})
 		return
 	}
 
 	// generate jwt token
 
-	JWT_SECRET := []byte(os.Getenv("JWT_SECRET"))
-	type MyCustomClaims struct {
-		FirstName string `json:"firstName"`
-		//add custom fields here
-		jwt.RegisteredClaims
-	}
+	signed_token, err := utils.GenerateJWT(user.ID)
 
-	claims := MyCustomClaims{
-		"bar",
-		jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)), // expiry of one day
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "go_jwt",
-			Subject:   strconv.Itoa(int(user.ID)),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed_token, err := token.SignedString(JWT_SECRET)
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "internal server error please try again",
+	if err != nil || signed_token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "internal server error",
 		})
 	}
 
@@ -135,8 +113,24 @@ func Login(c *gin.Context) {
 	})
 }
 
-func Validate(c *gin.Context) {
+func Logout(c *gin.Context) {
+	c.SetCookie("Authorization", "", -1, "", "", true, true)
 	c.JSON(http.StatusOK, gin.H{
-		"message": "I'm logged in",
+		"message": "logged out",
+	})
+}
+
+func Validate(c *gin.Context) {
+	user, exists := c.Get("user")
+
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "unauthenticated",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"user": user,
 	})
 }
