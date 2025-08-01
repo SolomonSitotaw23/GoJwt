@@ -3,8 +3,11 @@ package controllers
 import (
 	"context"
 	"net/http"
+	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/solomonsitotaw23/go_jwt/initializers"
 	"github.com/solomonsitotaw23/go_jwt/models"
 	"github.com/solomonsitotaw23/go_jwt/utils"
@@ -94,9 +97,17 @@ func Login(c *gin.Context) {
 
 	// generate jwt token
 
-	signed_token, err := utils.GenerateJWT(user.ID)
+	accessToken, err := utils.GenerateJWT(user.ID)
 
-	if err != nil || signed_token == "" {
+	if err != nil || accessToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "internal server error",
+		})
+	}
+
+	refreshToken, err := utils.GenerateRefreshToken(user.ID)
+
+	if err != nil || refreshToken == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "internal server error",
 		})
@@ -106,7 +117,8 @@ func Login(c *gin.Context) {
 	// by creating a cookie
 
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("Authorization", signed_token, 3600*24, "", "", true, true)
+	c.SetCookie("Authorization", accessToken, 900, "", "", true, true)       //15 mins
+	c.SetCookie("RefreshToken", refreshToken, 3600*24*7, "", "", true, true) // 7 days
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": "logged in successfully",
@@ -115,6 +127,7 @@ func Login(c *gin.Context) {
 
 func Logout(c *gin.Context) {
 	c.SetCookie("Authorization", "", -1, "", "", true, true)
+	c.SetCookie("RefreshToken", "", -1, "", "", true, true)
 	c.JSON(http.StatusOK, gin.H{
 		"message": "logged out",
 	})
@@ -132,5 +145,40 @@ func Validate(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"user": user,
+	})
+}
+
+func Refresh(c *gin.Context) {
+	refreshToken, err := c.Cookie("RefreshToken")
+
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "no refresh token"})
+		return
+	}
+
+	token, err := jwt.ParseWithClaims(refreshToken, &utils.MyCustomClaims{}, func(t *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("REFRESH_SECRET")), nil
+	})
+
+	if err != nil || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "invalid refresh token",
+		})
+		return
+	}
+
+	claims := token.Claims.(*utils.MyCustomClaims)
+	userID, _ := strconv.Atoi(claims.Subject)
+
+	newAccessToken, err := utils.GenerateJWT(uint(userID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "could not generate new access token",
+		})
+		return
+	}
+	c.SetCookie("Authorization", newAccessToken, 900, "", "", true, true)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "access token refreshed",
 	})
 }
