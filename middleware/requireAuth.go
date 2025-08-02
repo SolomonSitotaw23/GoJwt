@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -19,6 +20,7 @@ func RequireAuth(c *gin.Context) {
 
 	if err != nil || tokenString == "" {
 		c.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
 
 	// decode /validate it
@@ -42,20 +44,34 @@ func RequireAuth(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"error": "invalid token claims ",
 		})
+		return
 	}
 
 	// find the user with token sub
 
-	userId := claims["sub"]
+	subStr, ok := claims["sub"].(string)
+
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid sub claim"})
+		return
+	}
+
+	userID, err := strconv.ParseUint(subStr, 10, 64)
+
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "subject is not a valid user id"})
+		return
+	}
 
 	var user models.User
 
-	user, err = gorm.G[models.User](initializers.DB).Where("id = ?", userId).First(c)
+	user, err = gorm.G[models.User](initializers.DB).Where("id = ?", userID).First(c)
 
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"error": "user not found" + err.Error(),
 		})
+		return
 	}
 
 	// attach to req

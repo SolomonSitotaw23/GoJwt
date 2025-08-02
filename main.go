@@ -19,11 +19,6 @@ func init() {
 
 func main() {
 	router := gin.Default()
-	router.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "pong",
-		})
-	})
 
 	router.POST("/signup", controllers.SignUp)
 	router.POST("/login", controllers.Login)
